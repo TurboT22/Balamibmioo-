@@ -1,0 +1,48 @@
+<div>
+  <label for="amiiboFile">Import your Amiibo .bin file:</label><br/>
+  <input type="file" id="amiiboFile" accept=".bin" />
+</div>
+
+<div id="fileInfo" style="margin-top:10px;"></div>
+
+<script>
+  const fileInput = document.getElementById('amiiboFile');
+  const fileInfoDiv = document.getElementById('fileInfo');
+
+  let importedAmiiboData = null;
+
+  fileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.bin')) {
+      alert('Please select a valid .bin file.');
+      fileInput.value = ''; // Reset input
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      // e.target.result is an ArrayBuffer of the file content
+      importedAmiiboData = new Uint8Array(e.target.result);
+
+      // Show basic info
+      fileInfoDiv.innerHTML = `
+        <strong>Imported file:</strong> ${file.name} <br/>
+        <strong>Size:</strong> ${importedAmiiboData.length} bytes<br/>
+        <small>First 16 bytes: ${Array.from(importedAmiiboData.slice(0,16)).map(b => b.toString(16).padStart(2,'0')).join(' ')}</small>
+      `;
+
+      // Now you can use `importedAmiiboData` for NFC write or scan
+      // For example: enable a "Write to NFC" button here
+    };
+
+    reader.onerror = function() {
+      alert('Failed to read file!');
+      importedAmiiboData = null;
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+</script>

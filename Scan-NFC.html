@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NFC Tap - Scan NFC</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    button {
+      font-size: 18px;
+      padding: 12px 20px;
+      margin: 10px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background-color: #4caf50;
+      color: white;
+      min-width: 150px;
+    }
+    button:disabled {
+      background-color: #666;
+      cursor: not-allowed;
+    }
+    #log {
+      background-color: #000;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 15px;
+      margin-top: 20px;
+      border-radius: 6px;
+      width: 90%;
+      max-width: 600px;
+      height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    a {
+      color: #4caf50;
+      margin-top: 30px;
+      text-decoration: none;
+      font-size: 16px;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>NFC Tap - Scan NFC Tag</h1>
+  <button id="scanBtn">Start NFC Scan</button>
+  <div id="log">Press "Start NFC Scan" to begin.</div>
+  <a href="/">← Back to Main Page</a>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const scanBtn = document.getElementById('scanBtn');
+
+    function log(msg) {
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    async function startScan() {
+      if (!('NDEFReader' in window)) {
+        log('Web NFC is not supported on this device/browser.');
+        scanBtn.disabled = true;
+        return;
+      }
+
+      try {
+        const ndef = new NDEFReader();
+        await ndef.scan();
+        log('NFC scan started. Hold your device near an NFC tag.');
+
+        ndef.onreadingerror = () => {
+          log('Error reading NFC tag.');
+        };
+
+        ndef.onreading = event => {
+          let message = '';
+          for (const record of event.message.records) {
+            const textDecoder = new TextDecoder();
+            if (record.recordType === 'text') {
+              message += textDecoder.decode(record.data);
+            } else if (record.recordType === 'url') {
+              message += textDecoder.decode(record.data);
+            } else {
+              message += '[Unsupported record type]';
+            }
+          }
+          log('NFC Tag Content: ' + message);
+          alert('NFC Tag Content:\n' + message);
+        };
+      } catch (error) {
+        log('Failed to start NFC scan: ' + error.message);
+      }
+    }
+
+    scanBtn.addEventListener('click', startScan);
+  </script>
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NFC Tap - NFC Mod Hub</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+  body {
+    margin: 0; padding: 0;
+    font-family: 'Poppins', sans-serif;
+    background: #121212;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    background: #1f1f1f;
+    padding: 1rem 2rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    text-align: center;
+    border-bottom: 2px solid #6200ee;
+  }
+  main {
+    flex: 1;
+    padding: 2rem;
+    max-width: 600px;
+    margin: 0 auto;
+    width: 90vw;
+  }
+  h2 {
+    color: #6200ee;
+    margin-bottom: 0.5rem;
+  }
+  label {
+    display: block;
+    margin-top: 1rem;
+    font-weight: 600;
+  }
+  input[type="text"],
+  textarea {
+    width: 100%;
+    padding: 0.6rem;
+    margin-top: 0.3rem;
+    border-radius: 6px;
+    border: none;
+    font-size: 1rem;
+    font-family: inherit;
+  }
+  textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+  button {
+    margin-top: 1.5rem;
+    background: #6200ee;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.2rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+  }
+  button:hover:not(:disabled) {
+    background: #3700b3;
+  }
+  button:disabled {
+    background: #555;
+    cursor: not-allowed;
+  }
+  section#tags-list {
+    margin-top: 3rem;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+    margin-top: 1rem;
+  }
+  li {
+    background: #222;
+    margin-bottom: 0.75rem;
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  li > div {
+    flex: 1;
+  }
+  li strong {
+    color: #bb86fc;
+  }
+  li button {
+    background: #bb86fc;
+    color: #121212;
+    font-weight: 700;
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+  }
+  li button:hover {
+    background: #9b65db;
+  }
+  footer {
+    background: #1f1f1f;
+    padding: 1rem 2rem;
+    font-size: 0.9rem;
+    text-align: center;
+    border-top: 2px solid #6200ee;
+  }
+  /* Guide styling */
+  section#guide {
+    margin-top: 3rem;
+    background: #222;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    line-height: 1.5;
+    font-size: 0.9rem;
+  }
+  section#guide h3 {
+    color: #bb86fc;
+  }
+  @media (max-width: 480px) {
+    main {
+      padding: 1rem;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>NFC Tap - Your Key to Amiibo & More</header>
+
+<main>
+  <section id="create-tag">
+    <h2>Create New NFC Tag</h2>
+    <label for="tagName">Tag Name</label>
+    <input type="text" id="tagName" placeholder="E.g. My Amiibo" />
+
+    <label for="tagContent">Tag Content (Text or URL)</label>
+    <textarea id="tagContent" placeholder="You Just summoned A Flapper.ect"></textarea>
+
+    <button id="saveTagBtn" disabled>Save Tag</button>
+  </section>
+
+  <section id="tags-list">
+    <h2>Your Saved Tags</h2>
+    <ul id="tagsUl">
+      <!-- Saved tags appear here -->
+    </ul>
+  </section>
+
+  <section id="guide">
+    <h3>How to Import Your NFC Tag Data onto a Physical NFC Card</h3>
+    <ol>
+      <li>Ensure your device supports <strong>Web NFC API</strong> (Android Chrome recommended).</li>
+      <li>Create a tag by entering a name and content, then press "Save Tag".</li>
+      <li>Place your NFC card near your device's NFC sensor.</li>
+      <li>Click the "Write" button next to your saved tag and hold the card until the success message appears.</li>
+      <li>If your device doesn't support NFC writing, export your tag content and use a dedicated NFC writing app.</li>
+      <li>Test your card by scanning it with your phone or NFC reader.</li>
+    </ol>
+    <p><em>Note: NFC writing only works on supported devices with NFC hardware and permissions enabled.</em></p>
+  </section>
+</main>
+
+<footer>© 2025 NFC Tap — Modding NFC Made Easy</footer>
+
+<script>
+  const tagNameInput = document.getElementById('tagName');
+  const tagContentInput = document.getElementById('tagContent');
+  const saveTagBtn = document.getElementById('saveTagBtn');
+  const tagsUl = document.getElementById('tagsUl');
+
+  // Enable save button only if both inputs have content
+  function checkInputs() {
+    saveTagBtn.disabled = !(tagNameInput.value.trim() && tagContentInput.value.trim());
+  }
+  tagNameInput.addEventListener('input', checkInputs);
+  tagContentInput.addEventListener('input', checkInputs);
+
+  // Escape HTML for safety when rendering
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, m => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[m]);
+  }
+
+  // Load tags from localStorage and render
+  function loadTags() {
+    const tags = JSON.parse(localStorage.getItem('nfctap-tags') || '[]');
+    tagsUl.innerHTML = '';
+    if (tags.length === 0) {
+      tagsUl.innerHTML = '<li><em>No saved tags yet.</em></li>';
+      return;
+    }
+    tags.forEach(({name, content}, i) => {
+      const li = document.createElement('li');
+
+      const infoDiv = document.createElement('div');
+      infoDiv.innerHTML = `<strong>${escapeHtml(name)}</strong><br>${escapeHtml(content)}`;
+
+      const writeBtn = document.createElement('button');
+      writeBtn.textContent = 'Write';
+      writeBtn.title = `Write "${name}" to NFC tag`;
+      writeBtn.addEventListener('click', () => writeTag(name, content));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.title = `Delete "${name}"`;
+      deleteBtn.addEventListener('click', () => {
+        if(confirm(`Delete tag "${name}"?`)) {
+          tags.splice(i, 1);
+          localStorage.setItem('nfctap-tags', JSON.stringify(tags));
+          loadTags();
+        }
+      });
+
+      li.appendChild(infoDiv);
+      li.appendChild(writeBtn);
+      li.appendChild(deleteBtn);
+      tagsUl.appendChild(li);
+    });
+  }
+
+  // Save new tag to localStorage and update list
+  function saveTag() {
+    const name = tagNameInput.value.trim();
+    const content = tagContentInput.value.trim();
+    if(!name || !content) return;
+
+    const tags = JSON.parse(localStorage.getItem('nfctap-tags') || '[]');
+    tags.push({name, content});
+    localStorage.setItem('nfctap-tags', JSON.stringify(tags));
+
+    tagNameInput.value = '';
+    tagContentInput.value = '';
+    checkInputs();
+    loadTags();
+  }
+
+  saveTagBtn.addEventListener('click', saveTag);
+
+  // NFC writing function — simplified, with fallback alert if unsupported
+  async function writeTag(name, content) {
+    if ('NDEFReader' in window) {
+      try {
+        const ndef = new NDEFReader();
+        await ndef.write({records: [{recordType: "text", data: content}]});
+        alert(`Successfully wrote "${name}" to NFC tag!`);
+      } catch (error) {
+        alert(`Failed to write NFC tag: ${error.message}`);
+      }
+    } else {
+      alert('Web NFC API is not supported on this device/browser.');
+    }
+  }
+
+  // Initial setup
+  loadTags();
+  checkInputs();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Amiibo Decryptor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; padding: 1em; background: #121212; color: #eee; }
+  label, button { display: block; margin-top: 1em; }
+  input[type="file"] { margin-top: 0.5em; }
+  select { margin-top: 0.5em; }
+  pre { background: #222; padding: 1em; overflow-x: auto; max-height: 200px; }
+</style>
+</head>
+<body>
+
+<h1>Amiibo Decryptor</h1>
+
+<label>
+  Upload <strong>keyretail.bin</strong> (160 bytes):
+  <input type="file" id="keyFile" accept=".bin" />
+</label>
+
+<label>
+  Select Key Index (0 - 9):
+  <select id="keyIndex">
+    <option value="0">0</option>
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+    <option value="6">6</option>
+    <option value="7">7</option>
+    <option value="8">8</option>
+    <option value="9">9</option>
+  </select>
+</label>
+
+<label>
+  Upload encrypted Amiibo file (.bin or .nfc):
+  <input type="file" id="amiiboFile" accept=".bin,.nfc" />
+</label>
+
+<button id="decryptBtn" disabled>Decrypt Amiibo Data</button>
+
+<h2>Extracted Key (hex):</h2>
+<pre id="keyHex">No key loaded</pre>
+
+<h2>Decrypted Amiibo Data (hex):</h2>
+<pre id="decryptedData">No data decrypted yet.</pre>
+
+<script>
+  let keyBuffer = null;
+
+  const keyFileInput = document.getElementById('keyFile');
+  const keyIndexSelect = document.getElementById('keyIndex');
+  const amiiboFileInput = document.getElementById('amiiboFile');
+  const decryptBtn = document.getElementById('decryptBtn');
+  const keyHexOutput = document.getElementById('keyHex');
+  const decryptedDataOutput = document.getElementById('decryptedData');
+
+  // Helper: convert ArrayBuffer/Uint8Array to hex string
+  function toHex(buffer) {
+    return Array.from(new Uint8Array(buffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  // Load key file (160 bytes)
+  keyFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const arrayBuffer = reader.result;
+      if (arrayBuffer.byteLength !== 160) {
+        alert('Key file must be exactly 160 bytes!');
+        keyBuffer = null;
+        keyHexOutput.textContent = 'Invalid key file size.';
+        decryptBtn.disabled = true;
+        return;
+      }
+      keyBuffer = new Uint8Array(arrayBuffer);
+      updateKeyDisplay();
+      checkReady();
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  // Update displayed key slice in hex
+  function updateKeyDisplay() {
+    if (!keyBuffer) {
+      keyHexOutput.textContent = 'No key loaded';
+      return;
+    }
+    const idx = parseInt(keyIndexSelect.value);
+    const start = idx * 16;
+    const keySlice = keyBuffer.slice(start, start + 16);
+    keyHexOutput.textContent = toHex(keySlice);
+  }
+
+  keyIndexSelect.addEventListener('change', () => {
+    updateKeyDisplay();
+  });
+
+  // Enable decrypt button only if both files are loaded
+  function checkReady() {
+    decryptBtn.disabled = !(keyBuffer && amiiboFileInput.files.length > 0);
+  }
+
+  amiiboFileInput.addEventListener('change', () => {
+    checkReady();
+  });
+
+  // Decrypt Amiibo data with selected key
+  decryptBtn.addEventListener('click', () => {
+    if (!keyBuffer) {
+      alert('Please load the keyretail.bin file first.');
+      return;
+    }
+    if (amiiboFileInput.files.length === 0) {
+      alert('Please load an Amiibo file.');
+      return;
+    }
+
+    const amiiboFile = amiiboFileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const encryptedData = new Uint8Array(reader.result);
+
+      // Extract key slice
+      const idx = parseInt(keyIndexSelect.value);
+      const keySlice = keyBuffer.slice(idx * 16, idx * 16 + 16);
+
+      // AES-128-CBC requires IV. Amiibo uses IV = 16 bytes of zeroes
+      const iv = CryptoJS.lib.WordArray.create(new Uint8Array(16));
+
+      // Convert encryptedData to WordArray (CryptoJS format)
+      const encryptedWords = CryptoJS.lib.WordArray.create(encryptedData);
+
+      // Convert keySlice to WordArray
+      const keyWords = CryptoJS.lib.WordArray.create(keySlice);
+
+      // Decrypt
+      try {
+        const decrypted = CryptoJS.AES.decrypt(
+          { ciphertext: encryptedWords },
+          keyWords,
+          { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.NoPadding }
+        );
+
+        // Convert decrypted WordArray to Uint8Array
+        const decryptedBytes = new Uint8Array(decrypted.sigBytes);
+        for (let i = 0; i < decrypted.sigBytes; i++) {
+          decryptedBytes[i] = (decrypted.words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+        }
+
+        decryptedDataOutput.textContent = toHex(decryptedBytes);
+      } catch (e) {
+        decryptedDataOutput.textContent = 'Error decrypting: ' + e.message;
+      }
+    };
+
+    reader.readAsArrayBuffer(amiiboFile);
+  });
+</script>
+
+</body>
+</html>
