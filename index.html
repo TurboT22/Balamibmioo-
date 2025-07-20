@@ -1,48 +1,145 @@
-<div>
-  <label for="amiiboFile">Import your Amiibo .bin file:</label><br/>
-  <input type="file" id="amiiboFile" accept=".bin" />
-</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Amiibo Decryptor & Repacker</title>
+<style>
+  body { font-family: monospace; padding: 20px; background: #222; color: #eee; }
+  input, button { margin: 10px 0; display: block; }
+  pre { background: #333; padding: 15px; white-space: pre-wrap; word-wrap: break-word; }
+</style>
+</head>
+<body>
+  <h1>Amiibo Decrypt & Repack</h1>
+  <p>Upload your Amiibo <code>.bin</code> file and <code>locked-secret.bin</code> key file.</p>
 
-<div id="fileInfo" style="margin-top:10px;"></div>
+  <label for="amiiboFile">Amiibo .bin file:</label>
+  <input type="file" id="amiiboFile" accept=".bin" />
+
+  <label for="keyFile">Key file (locked-secret.bin):</label>
+  <input type="file" id="keyFile" accept=".bin" />
+
+  <button id="decryptBtn" disabled>🔓 Decrypt</button>
+  <button id="exportBtn" disabled>💾 Export (Re-encrypt)</button>
+
+  <h2>Decrypted Data (Hex View):</h2>
+  <pre id="output">Waiting for input...</pre>
 
 <script>
-  const fileInput = document.getElementById('amiiboFile');
-  const fileInfoDiv = document.getElementById('fileInfo');
+  const amiiboInput = document.getElementById('amiiboFile');
+  const keyInput = document.getElementById('keyFile');
+  const decryptBtn = document.getElementById('decryptBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const output = document.getElementById('output');
 
-  let importedAmiiboData = null;
+  let amiiboData = null;
+  let keyData = null;
+  let decryptedData = null;
 
-  fileInput.addEventListener('change', (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  function arrayBufferToHex(buffer) {
+    const bytes = new Uint8Array(buffer);
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  }
 
-    if (!file.name.endsWith('.bin')) {
-      alert('Please select a valid .bin file.');
-      fileInput.value = ''; // Reset input
-      return;
+  function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  amiiboInput.addEventListener('change', async () => {
+    if (amiiboInput.files.length === 1) {
+      amiiboData = await readFileAsArrayBuffer(amiiboInput.files[0]);
+      checkReady();
     }
+  });
 
-    const reader = new FileReader();
+  keyInput.addEventListener('change', async () => {
+    if (keyInput.files.length === 1) {
+      keyData = await readFileAsArrayBuffer(keyInput.files[0]);
+      checkReady();
+    }
+  });
 
-    reader.onload = function(e) {
-      // e.target.result is an ArrayBuffer of the file content
-      importedAmiiboData = new Uint8Array(e.target.result);
+  function checkReady() {
+    decryptBtn.disabled = !(amiiboData && keyData);
+  }
 
-      // Show basic info
-      fileInfoDiv.innerHTML = `
-        <strong>Imported file:</strong> ${file.name} <br/>
-        <strong>Size:</strong> ${importedAmiiboData.length} bytes<br/>
-        <small>First 16 bytes: ${Array.from(importedAmiiboData.slice(0,16)).map(b => b.toString(16).padStart(2,'0')).join(' ')}</small>
-      `;
+  decryptBtn.addEventListener('click', async () => {
+    output.textContent = 'Decrypting...';
 
-      // Now you can use `importedAmiiboData` for NFC write or scan
-      // For example: enable a "Write to NFC" button here
-    };
+    try {
+      const encrypted = amiiboData.slice(0, 256); // Only the first part is encrypted
+      const rest = amiiboData.slice(256); // Keep rest of the data untouched
 
-    reader.onerror = function() {
-      alert('Failed to read file!');
-      importedAmiiboData = null;
-    };
+      const keyBytes = keyData.slice(0, 16);
+      const iv = new Uint8Array(16); // All zero IV
 
-    reader.readAsArrayBuffer(file);
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'AES-CBC' },
+        false,
+        ['decrypt']
+      );
+
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-CBC', iv },
+        cryptoKey,
+        encrypted
+      );
+
+      decryptedData = new Uint8Array(decryptedBuffer);
+      output.textContent = arrayBufferToHex(decryptedBuffer);
+
+      exportBtn.disabled = false;
+    } catch (e) {
+      output.textContent = 'Error during decryption: ' + e.message;
+    }
+  });
+
+  exportBtn.addEventListener('click', async () => {
+    if (!decryptedData || !keyData) return;
+
+    try {
+      const keyBytes = keyData.slice(0, 16);
+      const iv = new Uint8Array(16);
+
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'AES-CBC' },
+        false,
+        ['encrypt']
+      );
+
+      const encryptedBuffer = await crypto.subtle.encrypt(
+        { name: 'AES-CBC', iv },
+        cryptoKey,
+        decryptedData
+      );
+
+      // Combine encrypted data + untouched remainder of the original file
+      const finalData = new Uint8Array(encryptedBuffer.byteLength + (amiiboData.byteLength - 256));
+      finalData.set(new Uint8Array(encryptedBuffer), 0);
+      finalData.set(new Uint8Array(amiiboData.slice(256)), encryptedBuffer.byteLength);
+
+      // Trigger download
+      const blob = new Blob([finalData], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'amiibo-encrypted.bin';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Error during re-encryption: ' + e.message);
+    }
   });
 </script>
+</body>
+</html>
